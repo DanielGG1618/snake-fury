@@ -1,23 +1,32 @@
-{-|
+{-# LANGUAGE MultiWayIf #-}
+
+{-
 This module defines the logic of the game and the communication with the `Board.RenderState`
 -}
 module GameState where
 
-import RenderState (BoardInfo (..), Point)
-import qualified RenderState as Board
-import Data.Sequence ( Seq(..))
-import System.Random (StdGen)
+import RenderState (
+  BoardInfo (..),
+  Point,
+  RenderMessage (..),
+  CellType (..)
+ )
+import Data.Sequence (Seq(..))
+import System.Random (StdGen, Random (randomR))
 
 data Direction = North | South | East | West deriving (Show, Eq)
 
-data SnakeSeq = SnakeSeq {snakeHead :: Point, snakeBody :: Seq Point} deriving (Show, Eq)
+data Snake = Snake {
+  snakeHead :: Point,
+  snakeBody :: Seq Point
+} deriving (Show, Eq)
 
-data GameState = GameState
-  { snakeSeq :: SnakeSeq
-  , applePosition :: Point
-  , direction :: Direction
-  , randomGen :: StdGen
-  } deriving (Show, Eq)
+data GameState = GameState {
+  gsSnake :: Snake,
+  gsApple :: Point,
+  gsDirection :: Direction,
+  gsStdGen :: StdGen
+} deriving (Show, Eq)
 
 opositeDirection :: Direction -> Direction
 opositeDirection North = South
@@ -25,86 +34,62 @@ opositeDirection South = North
 opositeDirection East = West
 opositeDirection West = East
 
-makeRandomPoint :: BoardInfo -> StdGen -> (Point, StdGen)
-makeRandomPoint = undefined -- TODO
+stepInDirection :: Direction -> Point -> Point
+stepInDirection North (x, y) = (x, y + 1)
+stepInDirection South (x, y) = (x, y - 1)
+stepInDirection East (x, y) = (x + 1, y)
+stepInDirection West (x, y) = (x - 1, y)
 
--- | Check if a point is in the snake
-inSnake :: Point -> SnakeSeq  -> Bool
-inSnake = undefined
+randomPoint :: BoardInfo -> StdGen -> (Point, StdGen)
+randomPoint (BoardInfo h w) = randomR ((1, 1), (h, w))
 
-{-
-This is a test for inSnake. It should return
-True
-True
-False
--}
--- >>> snake_seq = SnakeSeq (1,1) (Data.Sequence.fromList [(1,2), (1,3)])
--- >>> inSnake (1,1) snake_seq
--- >>> inSnake (1,2) snake_seq
--- >>> inSnake (1,4) snake_seq
+inSnakeBody :: Point -> Snake -> Bool
+inSnakeBody point (Snake _ body) =
+  point `elem` body
 
--- | Calculates de new head of the snake. Considering it is moving in the current direction
---   Take into acount the edges of the board
 nextHead :: BoardInfo -> GameState -> Point
-nextHead = undefined
-
-{-
-This is a test for nextHead. It should return
-True
-True
-True
--}
--- >>> snake_seq = SnakeSeq (1,1) (Data.Sequence.fromList [(1,2), (1,3)])
--- >>> apple_pos = (2,2)
--- >>> board_info = BoardInfo 4 4
--- >>> game_state1 = GameState snake_seq apple_pos West (System.Random.mkStdGen 1)
--- >>> game_state2 = GameState snake_seq apple_pos South (System.Random.mkStdGen 1)
--- >>> game_state3 = GameState snake_seq apple_pos North (System.Random.mkStdGen 1)
--- >>> nextHead board_info game_state1 == (1,4)
--- >>> nextHead board_info game_state2 == (2,1)
--- >>> nextHead board_info game_state3 == (4,1)
+nextHead (BoardInfo h w) (GameState (Snake hd _) _ direction _) =
+  let (x, y) = stepInDirection direction hd
+  in (x `mod` w, y `mod` h)
 
 -- | Calculates a new random apple, avoiding creating the apple in the same place, or in the snake body
 newApple :: BoardInfo -> GameState -> (Point, StdGen)
-newApple = undefined
+newApple boardInfo gameState@(GameState (Snake hd body) prevApple _ stdGen) =
+  let apple@(point, _) = randomPoint boardInfo stdGen
+  in if point `notElem` prevApple:<|hd:<|body
+    then apple
+    else newApple boardInfo gameState
 
-{- We can't test this function because it depends on makeRandomPoint -}
+move :: BoardInfo -> GameState -> (RenderMessage, GameState)
+move boardInfo gameState@(GameState snake@(Snake hd body) apple _ _) =
+  let hd' = nextHead boardInfo gameState
+  in if | hd' `inSnakeBody` snake -> (GameOver, undefined)
+        | hd' == apple ->
+          let (apple', stdGen') = newApple boardInfo gameState
+              body' = hd':<|body
+          in (
+            RenderBoard [
+              (hd', SnakeHead),
+              (hd, SnakeBody),
+              (apple, RenderState.Empty),
+              (apple', Apple)
+            ],
+            gameState{gsSnake = Snake hd' body', gsApple = apple', gsStdGen = stdGen'}
+          )
+        | otherwise -> case body of
+          xs:|>x -> (
+              RenderBoard [
+                (hd', SnakeHead),
+                (hd, SnakeBody),
+                (x, RenderState.Empty)
+              ],
+              gameState{gsSnake = Snake hd' (hd:<|xs)}
+            )
+          Data.Sequence.Empty -> (
+              RenderBoard [
+                (hd', SnakeHead),
+                (hd, RenderState.Empty)
+              ],
+              gameState{gsSnake = Snake hd' Data.Sequence.Empty}
+            )
 
-
--- | Moves the snake based on the current direction. It sends the adequate RenderMessage
--- Notice that a delta board must include all modified cells in the direction.
--- For example, if we move between this two steps
---        - - - -          - - - -
---        - 0 $ -    =>    - - 0 $
---        - - - -    =>    - - - -
---        - - - X          - - - X
--- We need to send the following delta: [((2,2), Empty), ((2,3), Snake), ((2,4), SnakeHead)]
---
--- Another example, if we move between this two steps
---        - - - -          - - - -
---        - - - -    =>    - X - -
---        - - - -    =>    - - - -
---        - 0 $ X          - 0 0 $
--- We need to send the following delta: [((2,2), Apple), ((4,3), Snake), ((4,4), SnakeHead)]
---
-
-move :: BoardInfo -> GameState -> (Board.RenderMessage , GameState)
-move = undefined
-
-{- This is a test for move. It should return
-
-RenderBoard [((1,4),SnakeHead),((1,1),Snake),((1,3),Empty)]
-RenderBoard [((2,1),SnakeHead),((1,1),Snake),((3,1),Apple)] ** your Apple might be different from mine
-RenderBoard [((4,1),SnakeHead),((1,1),Snake),((1,3),Empty)]
-
--}
-
--- >>> snake_seq = SnakeSeq (1,1) (Data.Sequence.fromList [(1,2), (1,3)])
--- >>> apple_pos = (2,1)
--- >>> board_info = BoardInfo 4 4
--- >>> game_state1 = GameState snake_seq apple_pos West (System.Random.mkStdGen 1)
--- >>> game_state2 = GameState snake_seq apple_pos South (System.Random.mkStdGen 1)
--- >>> game_state3 = GameState snake_seq apple_pos North (System.Random.mkStdGen 1)
--- >>> fst $ move board_info game_state1
--- >>> fst $ move board_info game_state2
--- >>> fst $ move board_info game_state3

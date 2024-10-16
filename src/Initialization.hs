@@ -1,4 +1,4 @@
-module Initialization where
+module Initialization(initGame) where
 
 import qualified RenderState as Render
 import qualified GameState as Game
@@ -25,7 +25,7 @@ initGame h w initialspeed = do
   newUserEventQueue <- newBoundedChan 3
   newSpeed <- newMVar initialspeed
   let boardInfo = Render.BoardInfo h w
-      gameState = Game.GameState (Game.SnakeSeq snakeHeadPos Empty) applePos Game.North sg
+      gameState = Game.GameState (Game.Snake snakeHeadPos Empty) applePos Game.North sg
       renderState = Render.buildInitialBoard boardInfo snakeHeadPos applePos
       eventQueue = EventQueue newUserEventQueue newSpeed initialspeed
   return (boardInfo, gameState, renderState, eventQueue)

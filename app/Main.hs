@@ -8,12 +8,12 @@ import Control.Concurrent (
  )
 import EventQueue (
   Event (Tick, UserEvent),
-  EventQueue (initialSpeed),
+  EventQueue (eqInitialSpeed),
   readEvent,
   writeUserInput,
  )
-import GameState (GameState (direction), move, opositeDirection)
-import Initialization (gameInitialization)
+import GameState (GameState (gsDirection), move, opositeDirection)
+import Initialization (initGame)
 import RenderState (BoardInfo, RenderState (gameOver), render, updateRenderState)
 import System.Environment (getArgs)
 import System.IO (BufferMode (NoBuffering), hSetBinaryMode, hSetBuffering, hSetEcho, stdin, stdout)
@@ -22,28 +22,23 @@ import Control.Monad (unless)
 cleanConsole :: IO ()
 cleanConsole = putStr "\ESC[2J"
 
--- The game loop is easy:
---   - wait some time
---   - read an Event from the queue
---   - Update the GameState
---   - Update the RenderState based on message delivered by GameState update
---   - Render into the console
 gameloop :: BoardInfo -> GameState -> RenderState -> EventQueue -> IO ()
-gameloop boardInfo gstate rstate queue = do
-  threadDelay $ initialSpeed queue
-  event <- readEvent queue
+gameloop boardInfo gstate rstate eventQueue = do
+  threadDelay $ eqInitialSpeed eventQueue
+  event <- readEvent eventQueue
   let (delta, gstate') =
         case event of
           Tick -> move boardInfo gstate
-          UserEvent m ->
-            if direction gstate == opositeDirection m
-              then move boardInfo gstate
-              else move boardInfo $ gstate{direction = m}
+          UserEvent direction ->
+            if gsDirection gstate /= opositeDirection direction
+              then move boardInfo $ gstate{gsDirection = direction}
+              else move boardInfo gstate
   let rstate' = updateRenderState rstate delta
-      isGameOver = gameOver rstate'
+  let gameIsOver = gameOver rstate'
+
   cleanConsole
   putStr $ render boardInfo rstate'
-  unless isGameOver $ gameloop boardInfo gstate' rstate' queue
+  unless gameIsOver $ gameloop boardInfo gstate' rstate' eventQueue
 
 main :: IO ()
 main = do
@@ -54,12 +49,10 @@ main = do
   hSetBuffering stdout NoBuffering
   hSetBinaryMode stdout True
 
-  -- Game Initializacion
-  [h, w, fps] <- fmap read <$> getArgs
-  let timeSpeed = 1_000_000 `div` fps -- One second is 1_000_000 microseconds, which is the unit used by GHC internally.
-  (boardInfo, gameState, renderState, eventQueue) <- gameInitialization h w timeSpeed
+  [h, w, fps] <- map read <$> getArgs
+  let timeSpeed = 1_000_000 `div` fps
+  (boardInfo, gameState, renderState, eventQueue) <- initGame h w timeSpeed
 
-  -- Game Loop. We run two different threads, one for the gameloop (main) and one for user inputs.
   _ <- forkIO $ writeUserInput eventQueue
   gameloop boardInfo gameState renderState eventQueue
 
