@@ -31,19 +31,13 @@ data GameState = GameState {
   gsStdGen :: StdGen
 } deriving (Show, Eq)
 
-type GameStep a = State GameState a
+type GameStep = State GameState
 
 opositeDirection :: Direction -> Direction
 opositeDirection North = South
 opositeDirection South = North
 opositeDirection East = West
 opositeDirection West = East
-
-stepInDirection :: Direction -> Point -> Point
-stepInDirection North (y, x) = (y - 1, x)
-stepInDirection South (y, x) = (y + 1, x)
-stepInDirection East (y, x) = (y, x + 1)
-stepInDirection West (y, x) = (y, x - 1)
 
 randomPoint :: BoardInfo -> GameStep Point
 randomPoint (BoardInfo h w)  = do
@@ -60,10 +54,10 @@ nextHead :: BoardInfo -> GameStep Point
 nextHead (BoardInfo h w) = do
   (Snake (x, y) _, direction) <- gets $ gsSnake &&& gsDirection
   return case direction of
-      North -> if x - 1 <= 0 then (w, y) else (x - 1, y)
-      South -> if x + 1  > w then (1, y) else (x + 1, y)
-      East  -> if y + 1  > h then (x, 1) else (x, y + 1)
-      West  -> if y - 1 <= 0 then (x, h) else (x, y - 1)
+      North -> if x - 1 < 1 then (w, y) else (x - 1, y)
+      South -> if x + 1 > w then (1, y) else (x + 1, y)
+      East -> if y + 1 > h then (x, 1) else (x, y + 1)
+      West -> if y - 1 < 1 then (x, h) else (x, y - 1)
 
 newApple :: BoardInfo -> GameStep Point
 newApple boardInfo = do
