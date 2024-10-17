@@ -26,6 +26,6 @@ initGame h w initialspeed = do
   newSpeed <- newMVar initialspeed
   let boardInfo = Render.BoardInfo h w
       gameState = Game.GameState (Game.Snake snakeHeadPos Empty) applePos Game.North sg
-      renderState = Render.buildInitialBoard boardInfo snakeHeadPos applePos
+      renderState = Render.initialBoard boardInfo snakeHeadPos applePos
       eventQueue = EventQueue newUserEventQueue newSpeed initialspeed
   return (boardInfo, gameState, renderState, eventQueue)

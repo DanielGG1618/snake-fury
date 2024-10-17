@@ -35,10 +35,10 @@ opositeDirection East = West
 opositeDirection West = East
 
 stepInDirection :: Direction -> Point -> Point
-stepInDirection North (x, y) = (x, y + 1)
-stepInDirection South (x, y) = (x, y - 1)
-stepInDirection East (x, y) = (x + 1, y)
-stepInDirection West (x, y) = (x - 1, y)
+stepInDirection North (y, x) = (y - 1, x)
+stepInDirection South (y, x) = (y + 1, x)
+stepInDirection East (y, x) = (y, x + 1)
+stepInDirection West (y, x) = (y, x - 1)
 
 randomPoint :: BoardInfo -> StdGen -> (Point, StdGen)
 randomPoint (BoardInfo h w) = randomR ((1, 1), (h, w))
@@ -50,7 +50,13 @@ inSnakeBody point (Snake _ body) =
 nextHead :: BoardInfo -> GameState -> Point
 nextHead (BoardInfo h w) (GameState (Snake hd _) _ direction _) =
   let (x, y) = stepInDirection direction hd
-  in (x `mod` w, y `mod` h)
+  in ( if | w < x -> 1
+          | x < 1 -> w
+          | otherwise -> x
+     , if | h < y -> 1
+          | y < 1 -> h
+          | otherwise -> y
+     )
 
 -- | Calculates a new random apple, avoiding creating the apple in the same place, or in the snake body
 newApple :: BoardInfo -> GameState -> (Point, StdGen)
@@ -67,15 +73,17 @@ move boardInfo gameState@(GameState snake@(Snake hd body) apple _ _) =
         | hd' == apple ->
           let (apple', stdGen') = newApple boardInfo gameState
               body' = hd':<|body
-          in (
-            RenderBoard [
-              (hd', SnakeHead),
-              (hd, SnakeBody),
-              (apple, RenderState.Empty),
-              (apple', Apple)
-            ],
-            gameState{gsSnake = Snake hd' body', gsApple = apple', gsStdGen = stdGen'}
-          )
+          in ( RenderBoard
+               [ (hd', SnakeHead)
+               , (hd, SnakeBody)
+               , (apple', Apple)
+               ]
+             , gameState
+               { gsSnake = Snake hd' body'
+               , gsApple = apple'
+               , gsStdGen = stdGen'
+               }
+             )
         | otherwise -> case body of
           xs:|>x -> (
               RenderBoard [

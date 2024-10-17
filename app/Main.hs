@@ -14,7 +14,7 @@ import EventQueue (
  )
 import GameState (GameState (gsDirection), move, opositeDirection)
 import Initialization (initGame)
-import RenderState (BoardInfo, RenderState (gameOver), render, updateRenderState)
+import RenderState (BoardInfo, RenderState (rsGameOver), render, updateRenderState)
 import System.Environment (getArgs)
 import System.IO (BufferMode (NoBuffering), hSetBinaryMode, hSetBuffering, hSetEcho, stdin, stdout)
 import Control.Monad (unless)
@@ -26,19 +26,20 @@ gameloop :: BoardInfo -> GameState -> RenderState -> EventQueue -> IO ()
 gameloop boardInfo gstate rstate eventQueue = do
   threadDelay $ eqInitialSpeed eventQueue
   event <- readEvent eventQueue
-  let (delta, gstate') =
+  let (renderMessage, gstate') =
         case event of
           Tick -> move boardInfo gstate
           UserEvent direction ->
             if gsDirection gstate /= opositeDirection direction
               then move boardInfo $ gstate{gsDirection = direction}
               else move boardInfo gstate
-  let rstate' = updateRenderState rstate delta
-  let gameIsOver = gameOver rstate'
+  let rstate' = updateRenderState rstate renderMessage
+  let gameIsOver = rsGameOver rstate'
 
   cleanConsole
   putStr $ render boardInfo rstate'
-  unless gameIsOver $ gameloop boardInfo gstate' rstate' eventQueue
+  unless gameIsOver $
+    gameloop boardInfo gstate' rstate' eventQueue
 
 main :: IO ()
 main = do
@@ -52,6 +53,8 @@ main = do
   [h, w, fps] <- map read <$> getArgs
   let timeSpeed = 1_000_000 `div` fps
   (boardInfo, gameState, renderState, eventQueue) <- initGame h w timeSpeed
+
+  -- print $ show gameState
 
   _ <- forkIO $ writeUserInput eventQueue
   gameloop boardInfo gameState renderState eventQueue
