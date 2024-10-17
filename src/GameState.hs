@@ -72,7 +72,7 @@ move boardInfo gameState@(GameState snake@(Snake hd body) apple _ _) =
   in if | hd' `inSnakeBody` snake -> (GameOver, undefined)
         | hd' == apple ->
           let (apple', stdGen') = newApple boardInfo gameState
-              body' = hd':<|body
+              body' = hd:<|body
           in ( RenderBoard
                [ (hd', SnakeHead)
                , (hd, SnakeBody)
