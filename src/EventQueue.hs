@@ -24,17 +24,16 @@ data EventQueue = EventQueue {
   eqInitialSpeed :: Int
 }
 
-increasedSpeed :: Int -> Int -> Int
-increasedSpeed score initialSpeed =
-  let level = min score (50 `quot` 10)
-      speedFactor :: Double
-      speedFactor = 1 - fromIntegral level / 10.0
+speedForScore :: Int -> Int -> Int
+speedForScore score initialSpeed =
+  let level = fromIntegral $ min (score `quot` 10) 5
+      speedFactor = 1 - level / 10.0 :: Double
    in floor $ fromIntegral initialSpeed * speedFactor
 
 setSpeed :: Int -> EventQueue -> IO Int
-setSpeed speed (EventQueue _ m_currentSpeed initialSpeed) = do
+setSpeed score (EventQueue _ m_currentSpeed initialSpeed) = do
   currentSpeed <- readMVar m_currentSpeed
-  let newSpeed = increasedSpeed speed initialSpeed
+  let newSpeed = speedForScore score initialSpeed
   if newSpeed /= currentSpeed
     then swapMVar m_currentSpeed newSpeed >> return newSpeed
     else return currentSpeed
