@@ -14,7 +14,7 @@ import EventQueue (
  )
 import GameState (GameState (gsDirection), move, opositeDirection)
 import Initialization (initGame)
-import RenderState (BoardInfo, RenderState (rsGameOver, rsScore), render, updateRenderState)
+import RenderState (BoardInfo, RenderState (rsGameOver, rsScore), render)
 import System.Environment (getArgs)
 import System.IO (BufferMode (NoBuffering), hSetBinaryMode, hSetBuffering, hSetEcho, stdin, stdout)
 import Control.Monad (unless)
@@ -38,11 +38,12 @@ gameloop boardInfo gstate rstate eventQueue = do
             if gsDirection gstate /= opositeDirection direction
               then move boardInfo $ gstate{gsDirection = direction}
               else move boardInfo gstate
-  let rstate' = updateRenderState rstate renderMessages
+  let (builder, rstate') = render renderMessages boardInfo rstate
   let gameIsOver = rsGameOver rstate'
 
   cleanConsole
-  printBuilder $ render boardInfo rstate'
+
+  printBuilder builder
   unless gameIsOver $
     gameloop boardInfo gstate' rstate' eventQueue
 
