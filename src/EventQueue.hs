@@ -13,10 +13,8 @@ import Control.Concurrent.BoundedChan (
   tryReadChan,
   tryWriteChan,
  )
-import GameState (Direction (..))
+import GameState (Direction (..), Event (..))
 import System.IO (hReady, stdin)
-
-data Event = Tick | UserEvent Direction
 
 data EventQueue = EventQueue {
   eqDirectionsChan :: BoundedChan Direction,
@@ -78,3 +76,4 @@ readEvent :: EventQueue -> IO Event
 readEvent (EventQueue userChan _ _) = do
   mv <- tryReadChan userChan
   return $ maybe Tick UserEvent mv
+

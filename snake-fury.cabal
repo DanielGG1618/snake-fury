@@ -41,7 +41,7 @@ library
 
 executable snake-fury
   main-is: Main.hs
-  other-modules: Paths_snake_fury
+  other-modules: App
   hs-source-dirs: app
   default-extensions: StrictData
   ghc-options: -threaded -rtsopts -Wall "-with-rtsopts --io-manager=native"
@@ -49,5 +49,6 @@ executable snake-fury
       base
     , snake-fury
     , bytestring
+    , mtl
   default-language: Haskell2010
 
