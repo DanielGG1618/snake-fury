@@ -4,7 +4,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE InstanceSigs #-}
 
 module RenderState where
 
@@ -31,6 +30,12 @@ data BoardInfo = BoardInfo {
   width :: Int
 } deriving (Show, Eq)
 
+class HasBoardInfo r where
+  getBoardInfo :: r -> BoardInfo
+
+instance HasBoardInfo BoardInfo where
+  getBoardInfo = id
+
 type Board = Array Point CellType
 
 type DeltaBoard = [(Point, CellType)]
@@ -54,13 +59,7 @@ newtype RenderStep m a = RenderStep {
 class HasRenderState s where
   getRenderState :: s -> RenderState
   setRenderState :: s -> RenderState -> s
-
-instance HasRenderState RenderState where
-  getRenderState :: RenderState -> RenderState
-  getRenderState = id
-
-  setRenderState :: RenderState -> RenderState -> RenderState
-  setRenderState _ = id
+  modifyRenderState :: (RenderState -> RenderState) -> s -> s
 
 emptyBoard :: BoardInfo -> Board
 emptyBoard (BoardInfo h w) =
@@ -77,11 +76,11 @@ initialBoard boardInfo snake apple =
 
 updateRenderState :: (MonadState s m, HasRenderState s) => RenderMessage -> m ()
 updateRenderState message = do
-  rstate@(RenderState board score _) <- gets getRenderState
+  (board, score) <- gets $ (rsBoard &&& rsScore) . getRenderState
   case message of
-    RenderBoard delta -> modify \s -> setRenderState s rstate{rsBoard = board // delta}
-    GameOver -> modify \s -> setRenderState s rstate{rsGameOver = True}
-    ScoreIncrement -> modify \s -> setRenderState s rstate{rsScore = score + 1}
+    RenderBoard delta -> modify $ modifyRenderState \s -> s{rsBoard = board // delta}
+    GameOver -> modify $ modifyRenderState \s -> s{rsGameOver = True}
+    ScoreIncrement -> modify $ modifyRenderState \s -> s{rsScore = score + 1}
 
 updateMessages :: (MonadState s m, HasRenderState s) => [RenderMessage] -> m ()
 updateMessages = traverse_ updateRenderState
@@ -95,25 +94,23 @@ prettyCell Apple = "X "
 prettyScore :: Int -> Builder
 prettyScore score = "Score: " <> intDec score <> char7 '\n'
 
-render :: (MonadReader BoardInfo m, MonadState state m, HasRenderState state, MonadIO m) =>
-          [RenderMessage] -> m ()
-render messages = do
-  builder <- renderStep messages
+render :: (MonadReader r m, HasBoardInfo r, MonadState state m, HasRenderState state, MonadIO m) =>
+          m ()
+render = do
+  builder <- renderStep
   liftIO cleanConsole
   liftIO $ printBuilder builder
   where
     cleanConsole = putStr "\ESC[2J"
     printBuilder = hPutBuilder stdout
 
-renderStep :: (MonadReader BoardInfo m, MonadState s m, HasRenderState s) =>
-              [RenderMessage] -> m Builder
-renderStep messages = do
-  updateMessages messages
-
-  gameOver <- gets $ rsGameOver . getRenderState
-  if gameOver then return "GAME OVER" else do
+renderStep :: (MonadReader r m, HasBoardInfo r, MonadState s m, HasRenderState s) =>
+              m Builder
+renderStep = do
+  gameIsOver <- gets $ rsGameOver . getRenderState
+  if gameIsOver then return "GAME OVER" else do
     (board, score) <- gets $ (rsBoard &&& rsScore) . getRenderState
-    w <- asks width
+    w <- asks $ width . getBoardInfo
     return $ fst $ foldl'
       (\(!str, !i) cell ->
         (str <> prettyCell cell <> (if (i + 1) `mod` w == 0 then char7 '\n' else mempty), i + 1))

@@ -1,20 +1,15 @@
-{- |
-This module handles the external events of the game. That is: the user inputs and the time.
--}
+{- | This module handles the external events of the game. That is: the user inputs and the time. -}
 module EventQueue where
 
-import Control.Concurrent (
-  MVar,
-  readMVar,
-  swapMVar,
- )
-import Control.Concurrent.BoundedChan (
-  BoundedChan,
-  tryReadChan,
-  tryWriteChan,
- )
+import Control.Concurrent (MVar, readMVar, swapMVar)
+import Control.Concurrent.BoundedChan (BoundedChan, tryReadChan, tryWriteChan)
 import GameState (Direction (..), Event (..))
 import System.IO (hReady, stdin)
+import Control.Monad.State (MonadState, gets, MonadIO (liftIO))
+import Control.Monad.Reader (MonadReader)
+import Control.Monad (unless, void)
+import Control.Monad.Reader.Class (asks)
+import RenderState (RenderState(rsScore), HasRenderState (getRenderState))
 
 data EventQueue = EventQueue {
   eqDirectionsChan :: BoundedChan Direction,
@@ -22,19 +17,29 @@ data EventQueue = EventQueue {
   eqInitialSpeed :: Int
 }
 
+class HasEventQueue r where
+  getEventQueue :: r -> EventQueue
+
+class Monad m => MonadQueue m where
+  pullEvent :: m Event
+
 speedForScore :: Int -> Int -> Int
 speedForScore score initialSpeed =
   let level = fromIntegral $ min (score `quot` 10) 5
       speedFactor = 1 - level / 10.0 :: Double
    in floor $ fromIntegral initialSpeed * speedFactor
 
-setSpeed :: Int -> EventQueue -> IO Int
-setSpeed score (EventQueue _ m_currentSpeed initialSpeed) = do
-  currentSpeed <- readMVar m_currentSpeed
+setSpeedOnScore :: (MonadIO m, MonadReader r m, HasEventQueue r, MonadState s m, HasRenderState s) => m Int
+setSpeedOnScore = do
+  EventQueue _ m_currentSpeed initialSpeed <- asks getEventQueue
+  currentSpeed <- liftIO $ readMVar m_currentSpeed
+  score <- gets $ rsScore . getRenderState
+
   let newSpeed = speedForScore score initialSpeed
-  if newSpeed /= currentSpeed
-    then swapMVar m_currentSpeed newSpeed >> return newSpeed
-    else return currentSpeed
+  unless (newSpeed == currentSpeed) $
+    void $ liftIO (swapMVar m_currentSpeed newSpeed)
+
+  return newSpeed
 
 -- In StackOverflow we trust.
 getKey :: IO [Char]

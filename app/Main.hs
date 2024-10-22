@@ -22,5 +22,5 @@ main = do
 
   _ <- forkIO $ writeUserInput eventQueue
   let initialState = AppState gameState renderState
-  run boardInfo initialState eventQueue
+  run boardInfo eventQueue initialState
 
