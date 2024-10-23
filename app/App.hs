@@ -6,15 +6,15 @@
 module App where
 
 import Control.Concurrent (threadDelay)
-import EventQueue (EventQueue, setSpeedOnScore, MonadEventQueueReader(askEventQueue), MonadQueue (..), readEvent)
-import GameState (GameState, MonadGameState (getGameState, putGameState), move, MonadSnake (..))
+import EventQueue (EventQueue, setSpeedOnScore, MonadEventQueueReader(askEventQueue), readEvent)
+import GameState (GameState, MonadGameState (getGameState, putGameState), move)
 import RenderState
     ( BoardInfo,
       MonadRenderState(..),
       MonadBoardInfoReader(..),
       RenderState(rsGameOver),
-      updateMessages )
-import qualified RenderState (render)
+      updateMessages,
+      render )
 import Control.Monad (unless)
 import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
 import Control.Monad.State (MonadState, StateT, gets, evalStateT, modify)
@@ -39,9 +39,6 @@ instance Monad m => MonadEventQueueReader (App m) where
   askEventQueue :: App m EventQueue
   askEventQueue = asks envEventQueue
 
-instance MonadIO m => MonadQueue (App m) where
-  pullEvent = askEventQueue >>= liftIO . readEvent
-
 newtype App m a = App {
   runApp :: ReaderT Env (StateT AppState m) a
 } deriving (Functor , Applicative, Monad, MonadState AppState, MonadReader Env, MonadIO)
@@ -58,30 +55,21 @@ instance Monad m => MonadRenderState (App m) where
   putRenderState :: Monad m => RenderState -> App m ()
   putRenderState renderState = modify \s -> s{appRenderState = renderState}
 
-instance Monad m => MonadSnake (App m) where
-  updateGameState = move
-  updateRenderState = updateMessages
-
-class MonadRender m where
-  render :: m ()
-
-instance (Monad m, MonadIO m) => MonadRender (App m) where
-  render = RenderState.render
-
 gameloop :: ( MonadIO m
             , MonadBoardInfoReader m
             , MonadEventQueueReader m
             , MonadRenderState m
             , MonadGameState m
-            , MonadQueue m
-            , MonadSnake m
-            , MonadRender m
             ) => m ()
 gameloop = do
   speed <- setSpeedOnScore
   liftIO $ threadDelay speed
 
-  pullEvent >>= updateGameState >>= updateRenderState >> render
+  askEventQueue
+    >>= liftIO . readEvent
+    >>= move
+    >>= updateMessages
+    >> render
 
   gameIsOver <- getsRenderState rsGameOver
   unless gameIsOver gameloop

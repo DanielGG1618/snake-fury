@@ -45,10 +45,6 @@ class Monad m => MonadGameState m where
   modifyGameState :: (GameState -> GameState) -> m ()
   modifyGameState f = getGameState >>= putGameState . f
 
-class Monad m => MonadSnake m where
-  updateGameState :: Event -> m [RenderMessage]
-  updateRenderState :: [RenderMessage] -> m ()
-
 opositeDirection :: Direction -> Direction
 opositeDirection North = South
 opositeDirection South = North

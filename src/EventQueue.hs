@@ -8,6 +8,7 @@ import System.IO (hReady, stdin)
 import Control.Monad.State (MonadIO (liftIO))
 import Control.Monad (unless, void)
 import RenderState (RenderState(rsScore), MonadRenderState (getsRenderState))
+import Data.Functor ((<&>))
 
 data EventQueue = EventQueue {
   eqDirectionsChan :: BoundedChan Direction,
@@ -17,9 +18,6 @@ data EventQueue = EventQueue {
 
 class Monad m => MonadEventQueueReader m where
   askEventQueue :: m EventQueue
-
-class Monad m => MonadQueue m where
-  pullEvent :: m Event
 
 speedForScore :: Int -> Int -> Int
 speedForScore score initialSpeed =
@@ -77,6 +75,5 @@ parseUserInput _ = Nothing
 
 readEvent :: EventQueue -> IO Event
 readEvent (EventQueue userChan _ _) = do
-  mv <- tryReadChan userChan
-  return $ maybe Tick UserEvent mv
+  tryReadChan userChan <&> maybe Tick UserEvent
 
