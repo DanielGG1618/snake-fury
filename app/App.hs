@@ -1,21 +1,23 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE BlockArguments #-}
 
 module App where
 
 import Control.Concurrent (threadDelay)
-import EventQueue (EventQueue, setSpeedOnScore, getEventQueue, HasEventQueue, MonadQueue (..), readEvent)
-import GameState (HasGameState(..), GameState, move, MonadSnake (..))
+import EventQueue (EventQueue, setSpeedOnScore, MonadEventQueueReader(askEventQueue), MonadQueue (..), readEvent)
+import GameState (GameState, MonadGameState (getGameState, putGameState), move, MonadSnake (..))
 import RenderState
     ( BoardInfo,
-      HasRenderState(..),
-      HasBoardInfo(..),
+      MonadRenderState(..),
+      MonadBoardInfoReader(..),
       RenderState(rsGameOver),
       updateMessages )
 import qualified RenderState (render)
 import Control.Monad (unless)
 import Control.Monad.Reader (MonadReader, ReaderT (runReaderT))
-import Control.Monad.State (MonadState, StateT, gets, evalStateT)
+import Control.Monad.State (MonadState, StateT, gets, evalStateT, modify)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader.Class (asks)
 
@@ -24,30 +26,37 @@ data AppState = AppState {
   appRenderState :: RenderState
 }
 
-data Env = Env BoardInfo EventQueue
+data Env = Env {
+  envBoardInfo :: BoardInfo,
+  envEventQueue :: EventQueue
+}
 
-instance HasBoardInfo Env where
-  getBoardInfo (Env boardInfo _) = boardInfo
+instance Monad m => MonadBoardInfoReader (App m) where
+  askBoardInfo :: Monad m => App m BoardInfo
+  askBoardInfo = asks envBoardInfo
 
-instance HasEventQueue Env where
-  getEventQueue (Env _ eventQueue) = eventQueue
+instance Monad m => MonadEventQueueReader (App m) where
+  askEventQueue :: App m EventQueue
+  askEventQueue = asks envEventQueue
 
 instance MonadIO m => MonadQueue (App m) where
-  pullEvent = asks getEventQueue >>= liftIO . readEvent
+  pullEvent = askEventQueue >>= liftIO . readEvent
 
 newtype App m a = App {
   runApp :: ReaderT Env (StateT AppState m) a
 } deriving (Functor , Applicative, Monad, MonadState AppState, MonadReader Env, MonadIO)
 
-instance HasGameState AppState where
-  getGameState = appGameState
-  setGameState appState gameState = appState{appGameState = gameState}
-  modifyGameState modify appState = setGameState appState (modify $ getGameState appState)
+instance Monad m => MonadGameState (App m) where
+  getGameState :: Monad m => App m GameState
+  getGameState = gets appGameState
+  putGameState :: Monad m => GameState -> App m ()
+  putGameState gameState = modify \s -> s{appGameState = gameState}
 
-instance HasRenderState AppState where
-  getRenderState = appRenderState
-  setRenderState appState renderState = appState{appRenderState = renderState}
-  modifyRenderState modify appState = setRenderState appState (modify $ getRenderState appState)
+instance Monad m => MonadRenderState (App m) where
+  getRenderState :: Monad m => App m RenderState
+  getRenderState = gets appRenderState
+  putRenderState :: Monad m => RenderState -> App m ()
+  putRenderState renderState = modify \s -> s{appRenderState = renderState}
 
 instance Monad m => MonadSnake (App m) where
   updateGameState = move
@@ -60,8 +69,10 @@ instance (Monad m, MonadIO m) => MonadRender (App m) where
   render = RenderState.render
 
 gameloop :: ( MonadIO m
-            , MonadReader r m, HasBoardInfo r, HasEventQueue r
-            , MonadState s m, HasGameState s, HasRenderState s
+            , MonadBoardInfoReader m
+            , MonadEventQueueReader m
+            , MonadRenderState m
+            , MonadGameState m
             , MonadQueue m
             , MonadSnake m
             , MonadRender m
@@ -72,7 +83,7 @@ gameloop = do
 
   pullEvent >>= updateGameState >>= updateRenderState >> render
 
-  gameIsOver <- gets $ rsGameOver . getRenderState
+  gameIsOver <- getsRenderState rsGameOver
   unless gameIsOver gameloop
 
 run :: BoardInfo -> EventQueue -> AppState -> IO ()

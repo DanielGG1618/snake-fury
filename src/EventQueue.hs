@@ -5,11 +5,9 @@ import Control.Concurrent (MVar, readMVar, swapMVar)
 import Control.Concurrent.BoundedChan (BoundedChan, tryReadChan, tryWriteChan)
 import GameState (Direction (..), Event (..))
 import System.IO (hReady, stdin)
-import Control.Monad.State (MonadState, gets, MonadIO (liftIO))
-import Control.Monad.Reader (MonadReader)
+import Control.Monad.State (MonadIO (liftIO))
 import Control.Monad (unless, void)
-import Control.Monad.Reader.Class (asks)
-import RenderState (RenderState(rsScore), HasRenderState (getRenderState))
+import RenderState (RenderState(rsScore), MonadRenderState (getsRenderState))
 
 data EventQueue = EventQueue {
   eqDirectionsChan :: BoundedChan Direction,
@@ -17,8 +15,8 @@ data EventQueue = EventQueue {
   eqInitialSpeed :: Int
 }
 
-class HasEventQueue r where
-  getEventQueue :: r -> EventQueue
+class Monad m => MonadEventQueueReader m where
+  askEventQueue :: m EventQueue
 
 class Monad m => MonadQueue m where
   pullEvent :: m Event
@@ -29,11 +27,11 @@ speedForScore score initialSpeed =
       speedFactor = 1 - level / 10.0 :: Double
    in floor $ fromIntegral initialSpeed * speedFactor
 
-setSpeedOnScore :: (MonadIO m, MonadReader r m, HasEventQueue r, MonadState s m, HasRenderState s) => m Int
+setSpeedOnScore :: (MonadIO m, MonadEventQueueReader m, MonadRenderState m) => m Int
 setSpeedOnScore = do
-  EventQueue _ m_currentSpeed initialSpeed <- asks getEventQueue
+  EventQueue _ m_currentSpeed initialSpeed <- askEventQueue
   currentSpeed <- liftIO $ readMVar m_currentSpeed
-  score <- gets $ rsScore . getRenderState
+  score <- getsRenderState rsScore
 
   let newSpeed = speedForScore score initialSpeed
   unless (newSpeed == currentSpeed) $
